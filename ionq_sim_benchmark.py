@@ -30,11 +30,11 @@ for size in graph_sizes:
     graph = nx.Graph()
     graph.add_nodes_from(range(size))
     graph.add_edges_from(g[1])
-    #nx.draw_circular(graph, with_labels=True, alpha=0.8, node_size=500)
+    nx.draw_circular(graph, with_labels=True, alpha=0.8, node_size=500)
     
     
     #Run QAOA
-    problem = 'maxcut' #maxcut TODO: TSP, DSP
+    problem = 'TSP' #maxcut TODO: TSP, DSP
     p = 1
     qaoa_result, runtimes = qaoa.runQAOA(qpu, qpu_id, graph, problem, p) #List of 8 best solutions & average runtime
     
@@ -89,7 +89,7 @@ ax.set_xticklabels(graph_sizes)
 plt.yscale("linear")
  
 # Adding title
-plt.title("IonQ Simulator Runtime for different N, p = 1")
+plt.title("Problem: "+str(problem)+", Backend: "+str(qpu_id) + " simulator, Runtime for different N, p = " + str(p))
 plt.xlabel("Nodes")
 plt.ylabel("Runtime [ms]")
  

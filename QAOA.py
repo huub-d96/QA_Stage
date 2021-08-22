@@ -8,13 +8,64 @@ Description: QAOA functions
 """
 
 import xacc
+from math import pi
+import extra_gates as gates
 from scipy.optimize import minimize
 import matplotlib.pyplot as plt
 import time
 
 def genTSPCircuit(qpu, qpu_id, graph, params):
     
-    return 0
+    compiler = xacc.getCompiler('xasm')
+    circuit = '__qpu__ void qaoa_maxcut(qbit q){  \n'
+    
+    p = len(params)//2
+    beta = params[:p]
+    gamma = params[p:]
+    
+    D = 1
+    
+    num_nodes = len(graph.nodes)
+    num_qbits = num_nodes**2
+    #Set inital state 
+    for q in range(num_nodes):
+        q_range = range(q*num_nodes, (q+1)*num_nodes)
+        circuit += gates.dicke_init(num_nodes, 2, q_range)
+    
+    #Cost unitary
+    for P in range(p):
+        for i in range(num_qbits):
+            circuit += ('Rz(q[%i], %f); \n' % (i, gamma[P]*D/(2*pi)))
+            
+        for i in range(num_nodes):
+            for j in range(i):
+                if i != j:
+                    circuit += gates.rzz(20*gamma[P]/pi, j+i*num_nodes, i+j*num_nodes)
+    
+    #Mixer unitary
+        for i in range(0, num_nodes):
+            circuit += gates.rxx(-beta[P], i*num_nodes, (i*num_nodes+1))
+            circuit += gates.rxx(-beta[P], (i*num_nodes+1), (i*num_nodes+2))
+
+            circuit += gates.ryy(-beta[P], i*num_nodes, (i*num_nodes+1))
+            circuit += gates.ryy(-beta[P], (i*num_nodes+1), (i*num_nodes+2))
+    
+    #Measurements
+    for N in range(len(graph.nodes)):
+        circuit += ('Measure(q[%i]); \n' % N)
+    
+    #Finish circuit        
+    circuit += ('}')
+        
+    #print(circuit)     
+        
+    program = compiler.compile(circuit, qpu)
+    
+    mapped_program = program.getComposite('qaoa_maxcut')
+    if(qpu_id[0:3] == 'ibm'):
+        mapped_program.defaultPlacement(qpu)
+        
+    return mapped_program
 
 def getTSPExpectation(counts, graph):
     
@@ -91,34 +142,18 @@ def getMaxcutExpectation(counts, graph):
         
     return avg/sum_count
 
-def getOptFunction(qpu, graph, buffer, qpu_id, problem, runtimes):
+def getOptFunction(qpu, graph, buffer, qpu_id, circuitFunc, expFunc, runtimes):
         
     def execute_circ(params):
         
-        if(problem == 'maxcut'):
-            program = genMaxcutCircuit(qpu, qpu_id, graph, params)
-        elif(problem == 'TSP'):
-            program = genTSPCircuit(qpu, qpu_id, graph, params)
-        elif(problem == 'DSP'):
-            program = genDSPCircuit(qpu, qpu_id, graph, params)
-        else:
-            print('Unknown problem set: Exit...')
-            quit()
+        program = circuitFunc(qpu, qpu_id, graph, params)
         
         start = time.time()
         qpu.execute(buffer, program)        
         runtimes.append(getRuntime(qpu_id, buffer, start))
         results = buffer.getMeasurementCounts()
         
-        if(problem == 'maxcut'):
-            expectation = getMaxcutExpectation(results, graph)
-        elif(problem == 'TSP'):
-            expectation = getTSPExpectation(results, graph)    
-        elif(problem == 'DSP'):
-            expectation = getDSPExpectation(results, graph)        
-        else:
-            print('Unknown problem set: Exit...')
-            quit()    
+        expectation = expFunc(results, graph) 
         
         return expectation
     
@@ -168,12 +203,28 @@ def getRuntime(qpu_id, buffer, start):
 
 def runQAOA(qpu, qpu_id, graph, problem, p):
     
-    #Setup QAOA variables
-    buffer = xacc.qalloc(graph.number_of_nodes())
+    #Setup QAOA objects and functions
+    
+    if(problem == 'maxcut'):
+        circuitFunc = genMaxcutCircuit
+        expFunc = getMaxcutExpectation
+        buffer = xacc.qalloc(graph.number_of_nodes())
+    elif(problem == 'TSP'):
+        circuitFunc = genTSPCircuit
+        expFunc = getTSPExpectation
+        buffer = xacc.qalloc(graph.number_of_nodes()**2)
+    elif(problem == 'DSP'):
+        circuitFunc = genDSPCircuit
+        expFunc = getDSPExpectation
+        buffer = xacc.qalloc(graph.number_of_nodes()+10)
+    else:
+        print('Unknown problem set: Exit...')
+        quit()
+        
     
     #Find optimal values
     runtimes = []
-    optFunc = getOptFunction(qpu, graph, buffer, qpu_id, problem, runtimes)
+    optFunc = getOptFunction(qpu, graph, buffer, qpu_id, circuitFunc, expFunc, runtimes)
     initParams = [1.0]*2*p
     optResult = minimize(optFunc, initParams, method='COBYLA')
     optParams = optResult.x

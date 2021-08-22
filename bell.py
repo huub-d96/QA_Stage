@@ -4,21 +4,35 @@
 #Description: Test script to generate a bell pair
 
 import xacc
+import extra_gates as gates
 
 #Setup qpu platform for two qubits
-ibm_backend = 'ionq'
+ibm_backend = 'aer'
 qpu = xacc.getAccelerator(ibm_backend)
-buffer = xacc.qalloc(2)
+n = 5
+buffer = xacc.qalloc(n)
 
 #Create quantum program
 compiler = xacc.getCompiler('xasm')
-circuit = '''__qpu__ void bell(qbit q){
-		H(q[0]);
-        CX(q[0], q[1]);
-        
-        Measure(q[0]);
-        Measure(q[1]);
-		}'''
+
+circuit = "__qpu__ void bell(qbit q){ \n"
+circuit += gates.dicke_init(n, 2, range(n))
+circuit += '''
+            Measure(q[0]);
+            Measure(q[1]);
+            Measure(q[2]);
+            Measure(q[3]);
+            Measure(q[4]);
+            }
+            '''
+
+#circuit = '''__qpu__ void bell(qbit q){
+#		H(q[0]);
+#        Toffoli(q[0], q[1], q[2]);
+#        
+#        Measure(q[0]);
+#        Measure(q[1]);
+#		}'''
 
 program = compiler.compile(circuit, qpu)
 
