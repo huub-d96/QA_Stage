@@ -11,11 +11,31 @@ def rxx(theta, q0, q1):
     
     circuit = "//RXX: \n"
     
+    circuit += ('H(q[%i]); \n' % q0)
+    circuit += ('H(q[%i]); \n' % q1)
+    
+    circuit += ('CX(q[%i], q[%i]); \n' % (q0, q1))
+    circuit += ('Rz(q[%i], %f); \n' % (q1, theta))
+    circuit += ('CX(q[%i], q[%i]); \n' % (q0, q1))
+    
+    circuit += ('H(q[%i]); \n' % q0)
+    circuit += ('H(q[%i]); \n' % q1)    
+    
     return circuit
 
 def ryy(theta, q0, q1):
     
     circuit = "//RYY: \n"
+    
+    circuit += ('Rx(q[%i], %f); \n' % (q0, pi/2))
+    circuit += ('Rx(q[%i], %f); \n' % (q1, pi/2))
+    
+    circuit += ('CX(q[%i], q[%i]); \n' % (q0, q1))
+    circuit += ('Rz(q[%i], %f); \n' % (q1, theta))
+    circuit += ('CX(q[%i], q[%i]); \n' % (q0, q1))
+    
+    circuit += ('Rx(q[%i], %f); \n' % (q0, -pi/2))
+    circuit += ('Rx(q[%i], %f); \n' % (q1, -pi/2))
     
     return circuit
 
@@ -90,7 +110,7 @@ def scs(n, k, qbits):
         theta = 2 * (acos(sqrt((n-control) / n)))
         circuit += ccry(theta, qbits[n-1], qbits[control], qbits[control-1])
         
-        circuit += ('CX(q[%i], q[%i]); \n' % (qbits[control-2], qbits[n-1]))        
+        circuit += ('CX(q[%i], q[%i]); \n' % (qbits[control-1], qbits[n-1]))        
     
     return circuit
 
@@ -112,17 +132,30 @@ def dicke_init(n, k, qbits):
         
     return circuit  
 
+def OR_2q(q0, q1, q2):
+    
+    circuit = "//OR_2q: \n"
+    
+    circuit += toffoli(q0, q1, q2)
+    circuit += ('CX(q[%i], q[%i]); \n' % (q0, q1))
+    circuit += ('CX(q[%i], q[%i]); \n' % (q0, q2))
+    
+    return circuit
 
-
-
-
-
-
-
-
-
-
-
-
-
-
+def OR_nrz(n, gamma, qbits):
+    
+    circuit = "//OR_nrz: \n"
+    
+    circuit += OR_2q(qbits[0], qbits[1], qbits[n])
+    
+    for i in range(2, n):
+        circuit += OR_2q(qbits[i], qbits[n+i-2], qbits[n+i-1])
+    
+    circuit += ('CRZ(q[%i], q[%i], %f); \n' % (2*n-2, 2*n-1, gamma))
+    
+    for i in range(n, 2, -1):
+        circuit += OR_2q(qbits[n-i-1], qbits[2*n-2-i], qbits[2*n-1-i])
+    
+    circuit += OR_2q(qbits[0], qbits[1], qbits[n])
+    
+    return circuit

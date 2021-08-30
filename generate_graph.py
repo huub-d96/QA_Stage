@@ -96,8 +96,8 @@ def tsp_problem_set(n, method, *arg):
     A = [[0 for x in range(n)] for x in range(n)]
     D = [[0 for x in range(n)] for x in range(n)]
 
-    for n in range(n):
-        D[n][n] = 2*max([item[2] for item in e])
+    for nn in range(n):
+        D[nn][nn] = 2*max([item[2] for item in e])
     for t in e:
         A[t[0]][t[1]] = 1
         A[t[1]][t[0]] = 1

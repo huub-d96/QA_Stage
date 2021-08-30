@@ -13,20 +13,20 @@ import extra_gates as gates
 from scipy.optimize import minimize
 import matplotlib.pyplot as plt
 import time
+import sys
 
 def genTSPCircuit(qpu, qpu_id, graph, params):
     
     compiler = xacc.getCompiler('xasm')
-    circuit = '__qpu__ void qaoa_maxcut(qbit q){  \n'
+    circuit = '__qpu__ void qaoa_tsp(qbit q){  \n'
     
     p = len(params)//2
     beta = params[:p]
     gamma = params[p:]
     
-    D = 1
-    
-    num_nodes = len(graph.nodes)
+    num_nodes, A, D = graph
     num_qbits = num_nodes**2
+    
     #Set inital state 
     for q in range(num_nodes):
         q_range = range(q*num_nodes, (q+1)*num_nodes)
@@ -35,7 +35,7 @@ def genTSPCircuit(qpu, qpu_id, graph, params):
     #Cost unitary
     for P in range(p):
         for i in range(num_qbits):
-            circuit += ('Rz(q[%i], %f); \n' % (i, gamma[P]*D/(2*pi)))
+            circuit += ('Rz(q[%i], %f); \n' % (i, gamma[P]*D[i]/(2*pi)))
             
         for i in range(num_nodes):
             for j in range(i):
@@ -51,7 +51,7 @@ def genTSPCircuit(qpu, qpu_id, graph, params):
             circuit += gates.ryy(-beta[P], (i*num_nodes+1), (i*num_nodes+2))
     
     #Measurements
-    for N in range(len(graph.nodes)):
+    for N in range(num_qbits):
         circuit += ('Measure(q[%i]); \n' % N)
     
     #Finish circuit        
@@ -61,19 +61,102 @@ def genTSPCircuit(qpu, qpu_id, graph, params):
         
     program = compiler.compile(circuit, qpu)
     
-    mapped_program = program.getComposite('qaoa_maxcut')
-    if(qpu_id[0:3] == 'ibm'):
-        mapped_program.defaultPlacement(qpu)
+    mapped_program = program.getComposite('qaoa_tsp')
+    #if(qpu_id[0:3] == 'ibm'):
+       # mapped_program.defaultPlacement(qpu)
         
     return mapped_program
 
 def getTSPExpectation(counts, graph):
     
-    return 0
+    v, A, D = graph
+    
+    out_state = counts
+    total_cost = 0
+    for t in out_state:
+        count = int(out_state.get(t))
+        bin_len = "{0:0" + str(v) + "b}"  # string required for binary formatting
+        bin_val = t.format(bin_len)
+        bin_val = [int(i) for i in bin_val]
+        cost = 0
+        coupling = []
+        for i in range(v):
+            for j in range(i):
+                if i != j:
+                    coupling.append([i+j*v, j+i*v])
+
+        for i in range(0, v):
+            for j in range(i, v):
+                cost += 0.5*D[i + v*j]*bin_val[i + v*j]
+        for j in coupling:
+            cost += -5*(1 - 2*bin_val[j[0]])*(1 - 2*bin_val[j[1]])
+        total_cost += cost*count
+
+    return total_cost
+
 
 def genDSPCircuit(qpu, qpu_id, graph, params):
     
-    return 0
+    p = len(params)//2
+    beta = params[:p]
+    gamma = params[p:]
+    
+    v = graph.number_of_nodes()
+    edge_list = [list(edge) for edge in graph.edges()]
+    vertice_list = list(range(0, v, 1))
+
+    connections = []
+    for i in range(v):
+        connections.append([i])
+    for t in edge_list:
+        connections[t[0]].append(t[1])
+        connections[t[1]].append(t[0])
+    ancillas = 0
+    for con in connections:
+        if len(con) > ancillas:
+            ancillas = len(con)
+    n = v+ancillas         # add ancillas
+    
+    compiler = xacc.getCompiler('xasm')
+    circuit = '__qpu__ void qaoa_dsp(qbit q){  \n'
+
+    for qubit in range(v):
+        
+        circuit +=  ('H(q[%i]); \n' % qubit)
+        #inverted crz gate
+        circuit +=  ('X(q[%i]); \n' % qubit)
+        circuit += ('CRZ(q[%i], q[%i], %f); \n' % (qubit, n-1, -gamma[0]))
+        circuit +=  ('X(q[%i]); \n' % qubit)
+        
+    for iteration in range(p):
+        f = 0
+        f_anc = v
+        for con in connections:  # TODO: fix for unordered edges e.g. (2,0)
+            c_len = len(con)
+            OR_range = con.copy()
+            for k in range(c_len-1):
+                OR_range.append(v+k)
+                
+            OR_range.append(n-1)
+            
+            circuit += gates.OR_nrz(c_len, gamma[p-1], OR_range)
+
+        for qb in vertice_list:
+            circuit += ('Rx(q[%i], %f); \n' % (qb, -2*beta[p-1]))
+    
+    #Measure results
+    for N in range(n):
+        circuit += ('Measure(q[%i]); \n' % N)
+        
+    circuit += ('}')  
+    
+    program = compiler.compile(circuit, qpu)
+    
+    mapped_program = program.getComposite('qaoa_dsp')
+    if(qpu_id[0:3] == 'ibm'):
+        mapped_program.defaultPlacement(qpu)
+        
+    return mapped_program
 
 def getDSPExpectation(counts, graph):
     
@@ -196,8 +279,7 @@ def getRuntime(qpu_id, buffer, start):
         runtime = (end - start)*1000 #s to ms
         
     else:
-        print("Unkown QPU ID!")
-        quit()
+        sys.exit("Unkown QPU ID!")
     
     return runtime
 
@@ -208,19 +290,19 @@ def runQAOA(qpu, qpu_id, graph, problem, p):
     if(problem == 'maxcut'):
         circuitFunc = genMaxcutCircuit
         expFunc = getMaxcutExpectation
-        buffer = xacc.qalloc(graph.number_of_nodes())
+        n_qbits = graph.number_of_nodes()        
     elif(problem == 'TSP'):
         circuitFunc = genTSPCircuit
         expFunc = getTSPExpectation
-        buffer = xacc.qalloc(graph.number_of_nodes()**2)
+        n_qbits = graph[0]**2
     elif(problem == 'DSP'):
         circuitFunc = genDSPCircuit
         expFunc = getDSPExpectation
-        buffer = xacc.qalloc(graph.number_of_nodes()+10)
+        n_qbits = graph.number_of_nodes()+10
     else:
-        print('Unknown problem set: Exit...')
-        quit()
+        sys.exit('Unknown problem set: Exit...')
         
+    buffer = xacc.qalloc(n_qbits)
     
     #Find optimal values
     runtimes = []
@@ -230,7 +312,7 @@ def runQAOA(qpu, qpu_id, graph, problem, p):
     optParams = optResult.x
     
     #Show results
-    program = genMaxcutCircuit(qpu, qpu_id, graph, optParams)
+    program = circuitFunc(qpu, qpu_id, graph, optParams)
     qpu.execute(buffer, program)
     results = buffer.getMeasurementCounts()
     

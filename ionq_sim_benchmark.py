@@ -20,22 +20,26 @@ import matplotlib.pyplot as plt
 qpu_id = 'aer' #'ionq' 
 qpu = xacc.getAccelerator(qpu_id, {'shots':2048})
 
-graph_sizes = [4, 5, 6 , 7, 8]
+graph_sizes = [3] #[4, 5, 6 , 7, 8]
 runtimes_list = []
 
-for size in graph_sizes:
+#Run QAOA
+problem = 'TSP' #maxcut TODO: TSP, DSP
+p = 3
 
-    # Construct and plot graph
-    g = gg.regular_graph(size)
-    graph = nx.Graph()
-    graph.add_nodes_from(range(size))
-    graph.add_edges_from(g[1])
-    nx.draw_circular(graph, with_labels=True, alpha=0.8, node_size=500)
+for size in graph_sizes:    
+       
+    if(problem =='maxcut'):
+        g = gg.regular_graph(size)
+        graph = nx.Graph()
+        graph.add_nodes_from(range(size))
+        graph.add_edges_from(g[1])
+        nx.draw_circular(graph, with_labels=True, alpha=0.8, node_size=500)
+    else:
+        graph = gg.tsp_problem_set(size, gg.regular_graph)    
+        #TODO: DRAW network
+        
     
-    
-    #Run QAOA
-    problem = 'TSP' #maxcut TODO: TSP, DSP
-    p = 1
     qaoa_result, runtimes = qaoa.runQAOA(qpu, qpu_id, graph, problem, p) #List of 8 best solutions & average runtime
     
     #Print results
