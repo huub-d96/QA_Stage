@@ -14,6 +14,10 @@ from scipy.optimize import minimize
 import matplotlib.pyplot as plt
 import time
 import sys
+from qiskit import IBMQ 
+
+#Global provider function to load IBM Accoutn credentials
+provider = IBMQ.load_account()
 
 def genTSPCircuit(qpu, qpu_id, graph, params):
     
@@ -72,9 +76,11 @@ def getTSPExpectation(counts, graph):
     v, A, D = graph
     
     out_state = counts
+    total_count = 0
     total_cost = 0
     for t in out_state:
         count = int(out_state.get(t))
+        total_count += count
         bin_len = "{0:0" + str(v) + "b}"  # string required for binary formatting
         bin_val = t.format(bin_len)
         bin_val = [int(i) for i in bin_val]
@@ -91,6 +97,8 @@ def getTSPExpectation(counts, graph):
         for j in coupling:
             cost += -5*(1 - 2*bin_val[j[0]])*(1 - 2*bin_val[j[1]])
         total_cost += cost*count
+        
+        total_cost = -total_cost/total_count
 
     return total_cost
 
@@ -101,8 +109,7 @@ def genDSPCircuit(qpu, qpu_id, graph, params):
     beta = params[:p]
     gamma = params[p:]
     
-    v = graph.number_of_nodes()
-    edge_list = [list(edge) for edge in graph.edges()]
+    v, edge_list = graph
     vertice_list = list(range(0, v, 1))
 
     connections = []
@@ -122,7 +129,9 @@ def genDSPCircuit(qpu, qpu_id, graph, params):
 
     for qubit in range(v):
         
+        #Initialize to |+>
         circuit +=  ('H(q[%i]); \n' % qubit)
+        
         #inverted crz gate
         circuit +=  ('X(q[%i]); \n' % qubit)
         circuit += ('CRZ(q[%i], q[%i], %f); \n' % (qubit, n-1, -gamma[0]))
@@ -145,7 +154,7 @@ def genDSPCircuit(qpu, qpu_id, graph, params):
             circuit += ('Rx(q[%i], %f); \n' % (qb, -2*beta[p-1]))
     
     #Measure results
-    for N in range(n):
+    for N in range(v):
         circuit += ('Measure(q[%i]); \n' % N)
         
     circuit += ('}')  
@@ -160,7 +169,39 @@ def genDSPCircuit(qpu, qpu_id, graph, params):
 
 def getDSPExpectation(counts, graph):
     
-    return 0
+    v, edge_list = graph   
+    vertice_list = list(range(0, v, 1))
+    connections = []
+    
+    for i in range(v):
+        connections.append([i])
+    for t in edge_list:
+        connections[t[0]].append(t[1])
+        connections[t[1]].append(t[0])
+    total_count = 0
+    total_cost = 0
+    
+    for key in counts:
+        count = int(counts.get(key))
+        total_count += count
+        bin_len = "{0:0" + str(v) + "b}"  # string required for binary formatting
+        bin_val = key.format(bin_len)
+        bin_val = [int(i) for i in bin_val]
+        bin_val.reverse()
+        T = 0
+        for con in connections:
+            tmp = 0
+            for k in con:
+                tmp = tmp or bin_val[k]
+                if tmp:
+                    T += 1
+                    break
+        D = 0
+        for i in range(v):
+            D += 1 - bin_val[i]
+        total_cost += (T+D)*count
+    total_cost = -total_cost/total_count
+    return total_cost
 
 def genMaxcutCircuit(qpu, qpu_id, graph, params):
     
@@ -171,24 +212,26 @@ def genMaxcutCircuit(qpu, qpu_id, graph, params):
     beta = params[:p]
     gamma = params[p:]
     
+    v, edge_list = graph
+    
     #Set inital state to superposition
-    for N in range(len(graph.nodes)):
+    for N in range(v):
         circuit += ('H(q[%i]); \n' % N)
     
     for P in range(p):  
             
         #For all edges, set cost Hamiltonian
-        for E in graph.edges:            
+        for E in edge_list:            
             circuit += ('CX(q[%i], q[%i]); \n' % (E[0], E[1]))
             circuit += ('Ry(q[%i], %f); \n' % (E[1], gamma[P]))
             circuit += ('CX(q[%i], q[%i]); \n' % (E[0], E[1]))
         
         #Apply mixer hamilonian to all qubits    
-        for N in range(len(graph.nodes)):
+        for N in range(v):
             circuit += ('Rx(q[%i], %f); \n' % (N, beta[P]))
             
     #Measure results
-    for N in range(len(graph.nodes)):
+    for N in range(v):
         circuit += ('Measure(q[%i]); \n' % N)
         
     circuit += ('}')
@@ -207,9 +250,10 @@ def genMaxcutCircuit(qpu, qpu_id, graph, params):
 def getMaxcutExpectation(counts, graph):
     
     def maxcut_obj(x, graph):
-
+        
+        edge_list = graph[1]
         obj = 0
-        for i, j in graph.edges():
+        for i, j in edge_list:
             if x[i] != x[j]:
                 obj -= 1
                 
@@ -225,7 +269,7 @@ def getMaxcutExpectation(counts, graph):
         
     return avg/sum_count
 
-def getOptFunction(qpu, graph, buffer, qpu_id, circuitFunc, expFunc, runtimes):
+def getOptFunction(qpu, graph, buffer, qpu_id, circuitFunc, expFunc, job_runtimes):
         
     def execute_circ(params):
         
@@ -233,7 +277,7 @@ def getOptFunction(qpu, graph, buffer, qpu_id, circuitFunc, expFunc, runtimes):
         
         start = time.time()
         qpu.execute(buffer, program)        
-        runtimes.append(getRuntime(qpu_id, buffer, start))
+        job_runtimes.append(getRuntime(qpu_id, buffer, start))
         results = buffer.getMeasurementCounts()
         
         expectation = expFunc(results, graph) 
@@ -252,12 +296,10 @@ def getRuntime(qpu_id, buffer, start):
     end = time.time()
     
     #IBM runtimes:  
-    if(qpu_id[0:3] == 'ibm'): #Remote runtime
+    if(qpu_id[0:3] == 'ibm'): #Remote runtime        
         
-        from qiskit import IBMQ 
         #Receive IBM job results via qiskit
         ibm_backend = qpu_id[4:]
-        provider = IBMQ.load_account()
         backend = provider.get_backend(ibm_backend)
         ID = buffer.getInformation().get('ibm-job-id')
         job = backend.retrieve_job(ID)
@@ -283,32 +325,34 @@ def getRuntime(qpu_id, buffer, start):
     
     return runtime
 
-def runQAOA(qpu, qpu_id, graph, problem, p):
+def runQAOA(qpu, qpu_id, graph, problem, p, verbose = True):
     
     #Setup QAOA objects and functions
+    nodes = graph[0]
     
     if(problem == 'maxcut'):
         circuitFunc = genMaxcutCircuit
         expFunc = getMaxcutExpectation
-        n_qbits = graph.number_of_nodes()        
+        n_qbits = nodes      
     elif(problem == 'TSP'):
         circuitFunc = genTSPCircuit
         expFunc = getTSPExpectation
-        n_qbits = graph[0]**2
+        n_qbits = nodes**2
     elif(problem == 'DSP'):
         circuitFunc = genDSPCircuit
         expFunc = getDSPExpectation
-        n_qbits = graph.number_of_nodes()+10
+        n_qbits = 2*nodes
     else:
         sys.exit('Unknown problem set: Exit...')
         
     buffer = xacc.qalloc(n_qbits)
     
     #Find optimal values
-    runtimes = []
-    optFunc = getOptFunction(qpu, graph, buffer, qpu_id, circuitFunc, expFunc, runtimes)
+    job_runtimes = []
+    optFunc = getOptFunction(qpu, graph, buffer, qpu_id, circuitFunc, expFunc, job_runtimes)
     initParams = [1.0]*2*p
     optResult = minimize(optFunc, initParams, method='COBYLA')
+    if verbose : print(optResult) 
     optParams = optResult.x
     
     #Show results
@@ -317,16 +361,17 @@ def runQAOA(qpu, qpu_id, graph, problem, p):
     results = buffer.getMeasurementCounts()
     
     #Plot results
-    plt.figure()
-    plt.bar(results.keys(), results.values(), color='b')
-    plt.xticks(rotation=45, ha='right')
-    plt.show()
+    if verbose :
+        plt.figure()
+        plt.bar(results.keys(), results.values(), color='b')
+        plt.xticks(rotation=45, ha='right')
+        plt.show()
     
     #Sort results
     results = dict(sorted(results.items(), key = lambda item: item[1], reverse=True)) #Return sorted list
     result_list = [k for k in results.keys()]
     
-    return result_list[:8], runtimes
+    return result_list[:8], job_runtimes
 
 
 

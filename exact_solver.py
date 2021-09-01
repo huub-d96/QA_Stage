@@ -67,38 +67,40 @@ def mcp_score(max_size):
         print(opt_results)
     return opt_results
 
-def dsp_score(max_size):
-    opt_results = [0] * (max_size - 4)
-    for i in range(5, max_size + 1):
-        result = 0
-        c = 0
-        size, edges = gg.regular_graph(i)
-        connections = []
-        for k in range(size):
-            connections.append([k])
-        for t in edges:
-            connections[t[0]].append(t[1])
-            connections[t[1]].append(t[0])
-        for n in range(2 ** size):
-            node_array = bitfield(n)
-            zero_array = [0] * (size - len(node_array))
-            node_array = zero_array + node_array
-            T = 0
-            for con in connections:
-                tmp = 0
-                for k in con:
-                    tmp = tmp or node_array[k]
-                    if tmp:
-                        T += 1
-                        break
-            D = 0
-            for j in range(size):
-                D += 1 - node_array[j]
-            c = (T + D)
-            if c >= result:
-                result = c
-        opt_results[i - 5] = result
-    return opt_results
+def dsp_score(graph):
+    
+    
+    result = 0
+    c = 0
+    size = graph.number_of_nodes()
+    edges = [list(edge) for edge in graph.edges()]   
+    connections = []
+    
+    for k in range(size):
+        connections.append([k])
+    for t in edges:
+        connections[t[0]].append(t[1])
+        connections[t[1]].append(t[0])
+    for n in range(2 ** size):
+        node_array = bitfield(n)
+        zero_array = [0] * (size - len(node_array))
+        node_array = zero_array + node_array
+        T = 0
+        for con in connections:
+            tmp = 0
+            for k in con:
+                tmp = tmp or node_array[k]
+                if tmp:
+                    T += 1
+                    break
+        D = 0
+        for j in range(size):
+            D += 1 - node_array[j]
+        c = (T + D)
+        if c >= result:
+            result = c
+    
+    return result
 
 def tsp_score(tsp_graph):
     
@@ -112,7 +114,8 @@ def tsp_score(tsp_graph):
                 #coupling.append([i + j * size, j + i * size])
                 coupling.append([j, i])
     print("evaluating all possible configurations, this might take a while.")
-    node_array_set = adjacencies(size)
+    #node_array_set = adjacencies(size)
+    node_array_set = tsp_arrays(size)
     for node_array in node_array_set:
         cost = 0
         for i in range(0, size):
@@ -136,3 +139,45 @@ def tsp_score(tsp_graph):
     opt_results = result
     print(D)
     return opt_results, opt_array
+
+def tsp_arrays(n):
+    
+    perms =  [list(perm) for perm in permutations(range(3))]
+    array_set = []
+    
+    for perm in perms:
+        ones_array = []
+        
+        for i in range(n):
+            ones = []
+            for j in range (n):
+                ones.append(0)
+            ones_array.append(ones)    
+        
+        
+        for i in range(n):
+            ones_array[i][perm[i]] = 1
+        
+        array_set.append(ones_array)
+        
+    return array_set
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+    
+    
+    

@@ -11,7 +11,7 @@ import QAOA as qaoa
 import exact_solver as exact
 import generate_graph as gg
 import xacc
-import networkx as nx
+import runtime_plots as plot
 
 # Get access to the desired QPU and
 # allocate some qubits to run on
@@ -19,18 +19,16 @@ import networkx as nx
 #qpu = xacc.getAccelerator('ibm', {'backend':'ibmq_manila', 'shots': 4096})
 #qpu = xacc.getAccelerator('ionq', {'shots':5000})
 qpu_id = 'aer'
-qpu = xacc.getAccelerator(qpu_id)
-problem = 'TSP'
+qpu = xacc.getAccelerator(qpu_id, {'shots': 2048})
+problem = 'maxcut'
 p = 2
-size = 3
+size = 4
 
 # Construct and plot graph
 if(problem !='TSP'):
-    g = gg.regular_graph(size)
-    graph = nx.Graph()
-    graph.add_nodes_from(range(size))
-    graph.add_edges_from(g[1])
-    nx.draw_circular(graph, with_labels=True, alpha=0.8, node_size=500)
+    #graph = gg.regular_graph(size)
+    graph = [4, [[0,1],[1,2], [2,3], [3,0]]]
+    plot.draw_graph(graph)
 else:
     graph = gg.tsp_problem_set(size, gg.regular_graph)    
     #TODO: DRAW network
@@ -41,7 +39,7 @@ qaoa_result, runtimes = qaoa.runQAOA(qpu, qpu_id, graph, problem, p) #List of 8 
 
 #Run exact solver
 if(problem == 'maxcut'):
-    exact_result = exact.mcp_solver(g)
+    exact_result = exact.mcp_solver(graph)
 elif(problem == 'TSP'):
     max_score, exact_result = exact.tsp_score(graph)
 

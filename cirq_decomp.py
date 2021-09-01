@@ -187,11 +187,11 @@ for iteration in range(p):
         qc.rx(-2*beta[p-1], qb)
 qc.measure(range(v), range(v))
 
-decomp = qc.decompose().decompose().decompose().decompose().decompose()
+decomp = qc.decompose()#.decompose().decompose().decompose().decompose()
 
 decomp.draw(output='mpl')
 
 #from qiskit import QuantumCircuit
-qiskit_qc = QuantumCircuit.from_qasm_str(qpu.getNativeCode(xacc_circuit, {'format': 'qasm'}))
+#qiskit_qc = QuantumCircuit.from_qasm_str(qpu.getNativeCode(xacc_circuit, {'format': 'qasm'}))
 #print(qiskit_qc)
-qiskit_qc.draw('mpl')        
+#qiskit_qc.draw('mpl')        

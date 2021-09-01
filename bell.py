@@ -7,8 +7,8 @@ import xacc
 import extra_gates as gates
 
 #Setup qpu platform for two qubits
-ibm_backend = 'aer'
-qpu = xacc.getAccelerator(ibm_backend)
+xacc.Initialize()
+qpu = xacc.getAccelerator('rigetti-qvm')
 n = 5
 buffer = xacc.qalloc(n)
 
@@ -47,17 +47,6 @@ results = buffer.getMeasurementCounts()
 print(results)
 #print(expZ)\
 
-# from qiskit import IBMQ    
-
-# #Receive IBM job results via qiskit
-# provider = IBMQ.load_account()
-# backend = provider.get_backend(ibm_backend)
-# ID = buffer.getInformation().get('ibm-job-id')
-# job = backend.retrieve_job(ID)
-
-# #Compute runtime
-# times = job.time_per_step()
-# runtime = times.get('COMPLETED') - times.get('RUNNING')
-
-# print(runtime.total_seconds())
+# Finalize the framework
+xacc.Finalize()
 
