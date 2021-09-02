@@ -8,7 +8,7 @@ Created on Tue Aug 31 20:29:26 2021
 
 import matplotlib.pyplot as plt
 import networkx as nx
-from matplotlib.ticker import MaxNLocator
+from matplotlib.ticker import FixedLocator
 
 def plot_iterations(backend_runtimes):
     return
@@ -23,39 +23,59 @@ def draw_graph(g):
     return
 
 def lineplot_results(backend_runtimes, graph_sizes, title, legend = []):
-    fig = plt.figure(num =1, figsize=(7,5))
-    ax = fig.gca()
+        
+    fig, (ax1, ax2, ax3) = plt.subplots(1, 3)
+    fig.set_size_inches(8,4)
     
-    backend_means = []
     for runtimes_list in backend_runtimes:
         means = []
+        iters = []
+        totals = []
         for runtimes in runtimes_list:
             means.append(sum(runtimes)/len(runtimes))
-        ax.plot(graph_sizes, means, marker = 'o')   
+            iters.append(len(runtimes))
+            totals.append(sum(runtimes)/1000) #ms to s
+        ax1.plot(graph_sizes, means, marker = 'o') 
+        ax2.plot(graph_sizes, iters, marker = 'o') 
+        ax3.plot(graph_sizes, totals, marker = 'o')
       
     
     # Force x-axis integers
-    ax.xaxis.set_major_locator(MaxNLocator(integer=True))
+    ax1.xaxis.set_major_locator(FixedLocator(graph_sizes))
+    ax2.xaxis.set_major_locator(FixedLocator(graph_sizes))
+    ax3.xaxis.set_major_locator(FixedLocator(graph_sizes))
     
     #y-axis scale
-    plt.yscale("log")
+    #plt.yscale("log")
     #ax.set_ylim([10**(-1), 10**6])
      
     # Adding title
-    plt.title(title)
-    plt.xlabel("Nodes")
-    plt.ylabel("Runtime [ms]")
+    fig.suptitle(title)
+    ax1.set_title('Average job runtime')
+    ax1.set_xlabel("Nodes")
+    ax1.set_ylabel("Runtime [ms]")
+    
+    ax2.set_title('Optimizer iterations')
+    ax2.set_xlabel("Nodes")
+    ax2.set_ylabel("Iterations []")
+    
+    ax3.set_title('Total QAOA runtime')
+    ax3.set_xlabel("Nodes")
+    ax3.set_ylabel("Runtime [s]")
     
     #Add legend
     for qpu in legend:
         if qpu in ['aer', 'qsim']:
             qpu = qpu+' (local)'
-    plt.legend(legend, bbox_to_anchor=(1, 0.9), loc = 'upper right')
+    fig.legend(legend, loc='upper center', bbox_to_anchor=(0.5, 0.05),
+          fancybox=True, shadow=True, ncol=5)
      
     # Removing top axes and right axes
     # ticks
-    ax.get_xaxis().tick_bottom()
-    ax.get_yaxis().tick_left()
+    ax1.get_xaxis().tick_bottom()
+    ax1.get_yaxis().tick_left()
+    
+    fig.tight_layout()
 
     
 

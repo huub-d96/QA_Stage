@@ -17,9 +17,9 @@ import runtime_plots as plot
 
 # Get access to the desired QPU and
 # allocate some qubits to run on
-qpu_ids = ['ibm:ibmq_qasm_simulator', 'ionq', 'qsim', 'aer'] 
+qpu_ids = ['qpp', 'qsim', 'aer', 'ionq'] #'ibm:ibmq_qasm_simulator', ionq
 
-graph_sizes = [4, 5, 6 , 7, 8]
+graph_sizes = [5 ,7, 9, 11, 13]
 
 #Run QAOA
 problem = 'maxcut' #maxcut, TSP, DSP  
@@ -54,10 +54,7 @@ for qpu_id in qpu_ids:
     #Store results
     backend_runtimes.append(runtimes_list)
     
-    #Cleanup qpu
-    #del qpu
-    
 #Plot results
-title = "Average job time for " + str(problem) +" problem, p="+str(p)+", for different graph sizes"
+title = "Benchmark: " + str(problem) +" problem, p="+str(p)
 plot.lineplot_results(backend_runtimes, graph_sizes, title, qpu_ids)
 

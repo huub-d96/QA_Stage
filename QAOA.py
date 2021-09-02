@@ -313,7 +313,7 @@ def getRuntime(qpu_id, buffer, start):
         import requests
         key = open('/home/huub/.ionq_config').readline().split(':')[1].strip()
         headers = {'Authorization': 'apiKey '+str(key)}
-        params = {'limit': 1} #Only retrieve most recent execution
+        params = {'limit': 1} #Only retrieve most recent job execution
         response = requests.get('https://api.ionq.co/v0.1/jobs/', headers=headers, params=params)
         runtime = response.json().get('jobs')[0].get('execution_time')
     
